@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Книги — ход генерации</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Georgia, serif; margin: 0; background: #141210; color: #eee8df; }
+    header { padding: 20px 20px 16px; border-bottom: 1px solid #3a342c; background: #1c1916; }
+    h1 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+    .now { font-size: 15px; color: #d8c8a8; }
+    nav { margin-top: 10px; }
+    nav a { color: #d8c8a8; margin-right: 12px; }
+    main { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; padding: 20px; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; padding: 12px; } }
+    section { background: #1c1916; border: 1px solid #3a342c; padding: 16px 18px; }
+    h2 { margin: 0 0 12px; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; color: #b9a27a; }
+    .round { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #2c2722; }
+    .meta { color: #9a9084; font-size: 13px; margin-bottom: 6px; }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    li { margin: 4px 0; }
+    .ok { color: #9dcc8a; }
+    .bad { color: #e0a07a; }
+    #events { font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; max-height: 420px; overflow: auto; color: #c9c0b4; }
+    a { color: #d8c8a8; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Книги</h1>
+    <div class="now" id="now">загрузка…</div>
+    <nav id="books"></nav>
+  </header>
+  <main>
+    <section>
+      <h2>Круги разбора</h2>
+      <div id="rounds">пока пусто</div>
+    </section>
+    <section>
+      <h2>Лог</h2>
+      <div id="events"></div>
+      <p><a id="book-link" href="#">текст книги</a></p>
+    </section>
+  </main>
+  <script>
+    function pickSlug(catalog) {
+      const want = new URLSearchParams(location.search).get("book");
+      if (want) return want;
+      return catalog.current || (catalog.books && catalog.books[0] && catalog.books[0].id);
+    }
+    async function readJson(url) {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(url);
+      return response.json();
+    }
+    async function tick() {
+      const catalog = await readJson("books.json");
+      const slug = pickSlug(catalog);
+      const meta = (catalog.books || []).find(item => item.id === slug) || { title: slug, number: "?" };
+      document.getElementById("title").textContent = "Книга " + (meta.number || "") + " — " + (meta.title || slug);
+      document.getElementById("books").innerHTML = (catalog.books || []).map(item => {
+        const mark = item.id === slug ? " <strong>← сейчас</strong>" : "";
+        return '<a href="?book=' + encodeURIComponent(item.id) + '">' + item.number + ". " + item.title + "</a>" + mark;
+      }).join(" ");
+      let state = {};
+      try {
+        state = await readJson("books/" + slug + "/status.json");
+      } catch (error) {
+        state = await readJson("books/" + slug + "/logs/state.json");
+      }
+      const status = state.status || "idle";
+      const round = state.round || 0;
+      const msg = state.message || "";
+      const minScore = state.min_score;
+      document.getElementById("now").textContent =
+        status + " · круг " + round +
+        (minScore != null ? " · мин. балл " + minScore + "/10" : "") +
+        " · " + msg + (state.updated_at ? " · " + state.updated_at : "");
+      document.getElementById("book-link").href = "books/" + slug + "/book.md";
+      const rounds = state.rounds || [];
+      document.getElementById("rounds").innerHTML = rounds.slice().reverse().map(row => {
+        const clean = row.clean;
+        const criteria = row.criteria || {};
+        const scores = Object.keys(criteria).map(key => {
+          const item = criteria[key] || {};
+          const n = item.score;
+          const cls = n >= 8 ? "ok" : "bad";
+          return "<li class=\"" + cls + "\">" + (item.title || key) + ": " + n + "/10" +
+            (item.gap ? " — " + item.gap : "") + "</li>";
+        }).join("");
+        const issues = (row.issues || []).map(item => {
+          const notes = (item.notes || []).join("; ");
+          return "<li>гл. " + item.chapter + " «" + (item.title || "") + "»: " + notes + "</li>";
+        }).join("");
+        return '<div class="round"><div class="meta">круг ' + row.n +
+          ' · ' + (row.at || "") +
+          ' · <span class="' + (clean ? "ok" : "bad") + '">' +
+          (clean ? "готово ≥8 по всем" : ("мин " + (row.min_score != null ? row.min_score : "?") + "/10")) +
+          "</span> · " + (row.words || "?") + " слов</div>" +
+          (scores ? "<ul>" + scores + "</ul>" : "") +
+          (issues ? "<ul>" + issues + "</ul>" : "") +
+          "</div>";
+      }).join("") || "<p>кругов ещё нет</p>";
+      const events = state.events || [];
+      document.getElementById("events").textContent = events.map(ev => {
+        return (ev.at || "") + "  " + ev.kind + "  " + JSON.stringify(ev).slice(0, 240);
+      }).join("\n");
+    }
+    tick();
+    setInterval(tick, 8000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "current": "01-pesni-dunaya",
+  "books": [
+    {
+      "id": "01-pesni-dunaya",
+      "number": 1,
+      "title": "Песни Дуная",
+      "genre": "детектив"
+    }
+  ]
+}
