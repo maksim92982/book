@@ -19,6 +19,9 @@ from generate import (
 )
 from logs_util import emit, patch_state
 
+PREV_TAIL_CHARS = 1800
+NEXT_HEAD_CHARS = 700
+
 
 def _plan(data: dict, number: int) -> dict | None:
     for row in data.get("chapters") or []:
@@ -39,10 +42,45 @@ def criterion_notes(review: dict, number: int) -> list[str]:
     return notes
 
 
-def correct_chapter(chapter: dict, data: dict, round_dir: Path, extra_notes: list[str] | None = None) -> dict:
+def chapter_path(number: int) -> Path:
+    return CHAPTERS / f"{number:02d}.md"
+
+
+def read_tail(number: int, *, chars: int = PREV_TAIL_CHARS) -> str:
+    path = chapter_path(number)
+    if number < 1 or not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8").strip()
+    if len(text) <= chars:
+        return text
+    return text[-chars:]
+
+
+def read_head(number: int, *, chars: int = NEXT_HEAD_CHARS) -> str:
+    path = chapter_path(number)
+    if number < 1 or not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8").strip()
+    return text[:chars]
+
+
+def will_rewrite(chapter: dict, needed: set[int]) -> bool:
+    number = int(chapter["n"])
+    return number in needed or bool(blockers_of(chapter))
+
+
+def correct_chapter(
+    chapter: dict,
+    data: dict,
+    round_dir: Path,
+    extra_notes: list[str] | None = None,
+    *,
+    prev_tail: str = "",
+    next_head: str = "",
+) -> dict:
     number = int(chapter["n"])
     notes = blockers_of(chapter) + list(extra_notes or [])
-    src = CHAPTERS / f"{number:02d}.md"
+    src = chapter_path(number)
     before_dir = round_dir / "before"
     before_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, before_dir / src.name)
@@ -50,6 +88,20 @@ def correct_chapter(chapter: dict, data: dict, round_dir: Path, extra_notes: lis
         return {"n": number, "changed": False, "notes": []}
     text = src.read_text(encoding="utf-8")
     plan = _plan(data, number)
+    bridge = ""
+    if prev_tail:
+        bridge += (
+            f"\nХвост предыдущей главы {number - 1} (уже актуальный текст). "
+            "Начни эту главу из той же ситуации, места и момента. "
+            "Не прыгай в другой день и не делай вид, что предыдущей сцены не было.\n"
+            f"{prev_tail}\n"
+        )
+    if next_head:
+        bridge += (
+            f"\nНачало следующей главы {number + 1} трогать не будут. "
+            "Закончи текущую главу так, чтобы это начало осталось логичным продолжением.\n"
+            f"{next_head}\n"
+        )
     prompt = f"""Ты корректор детективной повести. Перепиши главу целиком на русском.
 
 Это детектив, не черновик. Нужны улика в кадре, ложный след, живая сцена.
@@ -60,6 +112,7 @@ def correct_chapter(chapter: dict, data: dict, round_dir: Path, extra_notes: lis
 - оставлять короче {MIN_CHAPTER_WORDS} слов
 - оставлять опечатки, обрыв на полуслове, латиницу внутри русского слова
 - повторять «кивнул и пошёл» без нового факта
+- рвать сюжет с соседними главами
 
 Нужно исправить замечания:
 {json.dumps(notes, ensure_ascii=False, indent=2)}
@@ -75,7 +128,7 @@ def correct_chapter(chapter: dict, data: dict, round_dir: Path, extra_notes: lis
 
 Факты уже случившегося:
 {(FACTS.read_text(encoding="utf-8") if FACTS.is_file() else "")[:1800]}
-
+{bridge}
 Текущий текст:
 {text[:5200]}
 
@@ -98,15 +151,30 @@ def apply_review(review: dict, round_dir: Path) -> dict:
     patch_state(status="correct", message=f"круг {review.get('round')}: правки")
     emit("correct_start", round=review.get("round"))
     scores = review.get("criteria") if isinstance(review.get("criteria"), dict) else {}
-    needed = chapters_to_fix(scores, MIN_CRITERION_SCORE, len(review.get("chapters") or []))
+    chapters = sorted(review.get("chapters") or [], key=lambda row: int(row.get("n") or 0))
+    needed = chapters_to_fix(scores, MIN_CRITERION_SCORE, len(chapters))
+    to_fix = {int(row["n"]) for row in chapters if will_rewrite(row, needed)}
     results = []
-    for chapter in review.get("chapters") or []:
+    for chapter in chapters:
         number = int(chapter["n"])
         extra = criterion_notes(review, number)
-        if number not in needed and not blockers_of(chapter):
+        if number not in to_fix:
             results.append({"n": number, "changed": False, "notes": []})
             continue
-        results.append(correct_chapter(chapter, data, round_dir, extra))
+        prev_tail = read_tail(number - 1) if number > 1 else ""
+        next_head = ""
+        if (number + 1) not in to_fix:
+            next_head = read_head(number + 1)
+        results.append(
+            correct_chapter(
+                chapter,
+                data,
+                round_dir,
+                extra,
+                prev_tail=prev_tail,
+                next_head=next_head,
+            )
+        )
     assemble()
     payload = {
         "round": review.get("round"),
