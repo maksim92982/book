@@ -28,6 +28,18 @@ from generate import (
 from logs_util import emit, now_iso, patch_state
 
 CJK = re.compile(r"[\u4e00-\u9fff]")
+HTML_TAG = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?>")
+MIXED_WORD = re.compile(r"(?:[А-Яа-яЁё][A-Za-z]|[A-Za-z][А-Яа-яЁё])")
+STUCK_KEYS = re.compile(r"([А-Яа-яA-Za-z])\1{3,}")
+REPEAT_WORD = re.compile(r"\b([А-Яа-яЁёA-Za-z]{3,})\s+\1\b", re.I)
+AI_MARKERS = (
+    "я сейчас",
+    "как ии",
+    "языковая модель",
+    "as an ai",
+    "i am an ai",
+    "как нейросеть",
+)
 EMPTY_STYLE = {
     "шероховатость языка",
     "шероховатость",
@@ -72,14 +84,28 @@ def mechanical_chapter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     words = len(text.split())
     flags: list[str] = []
+    folded = text.casefold()
     if CJK.search(text):
         flags.append("китайские иероглифы")
     if words < MIN_CHAPTER_WORDS:
         flags.append(f"короткая ({words} слов, минимум {MIN_CHAPTER_WORDS})")
     if text.count("Глава ") > 2:
         flags.append("повтор заголовка")
-    if "я сейчас" in text.casefold() or "как ии" in text.casefold():
+    if any(marker in folded for marker in AI_MARKERS):
         flags.append("служебный текст модели")
+    if HTML_TAG.search(text) or "```" in text or "<span" in folded:
+        flags.append("html или markdown в прозе")
+    if "\ufffd" in text or "�" in text:
+        flags.append("сломанная кодировка")
+    if MIXED_WORD.search(text):
+        flags.append("смешанный алфавит в слове")
+    if STUCK_KEYS.search(text):
+        flags.append("опечатка: залипание клавиш")
+    if len(REPEAT_WORD.findall(text)) >= 3:
+        flags.append("повтор слова")
+    stripped = text.strip()
+    if stripped and stripped[-1] not in ".!?…»\"":
+        flags.append("обрыв главы")
     secret = killer_name()
     number = int(path.stem)
     if secret and number < 13:
@@ -142,7 +168,7 @@ def review_chapter(path: Path, data: dict, mech: dict) -> dict:
 Текст:
 {mech["text"][:5200]}
 
-Это детектив. Смотри: улики, ложные следы, спойлер убийцы, черновик прозы.
+Это детектив. Смотри: улики, ложные следы, спойлер убийцы, черновик прозы, опечатки и обрывы.
 Верни СТРОГО JSON:
 {{
   "score": 7,
@@ -225,7 +251,8 @@ def score_book(data: dict, mechanical: list[dict], words: int) -> tuple[dict[str
     "red_herrings": {{"score": 7, "gap": "...", "chapters": [3]}},
     "payoff": {{"score": 7, "gap": "...", "chapters": [13, 14]}},
     "cast": {{"score": 7, "gap": "...", "chapters": [4]}},
-    "prose": {{"score": 7, "gap": "...", "chapters": [2, 6]}}
+    "prose": {{"score": 7, "gap": "...", "chapters": [2, 6]}},
+    "mechanics": {{"score": 7, "gap": "...", "chapters": [2]}}
   }},
   "verdict": "четыре предложения: что ломает детектив и что править первым"
 }}
@@ -258,8 +285,7 @@ def blockers_of(chapter: dict) -> list[str]:
 
 def is_clean(review: dict) -> bool:
     scores = review.get("criteria") if isinstance(review.get("criteria"), dict) else {}
-    mechanical_ok = not any((row.get("flags") or []) for row in (review.get("mechanical") or []))
-    return meets_bar(scores, MIN_CRITERION_SCORE, mechanical_ok=mechanical_ok)
+    return meets_bar(scores, MIN_CRITERION_SCORE)
 
 
 def render_markdown(review: dict) -> str:
@@ -271,7 +297,7 @@ def render_markdown(review: dict) -> str:
         f"Замечаний: {review.get('issue_count')}. Чисто: {'да' if review.get('clean') else 'нет'}.",
         f"Мин. балл по критериям: {review.get('min_score')}. Порог {MIN_CRITERION_SCORE}/10.",
         "",
-        "## Критерии детектива",
+        "## Семь критериев",
         "",
     ]
     for item in CRITERIA:

@@ -51,8 +51,16 @@ CRITERIA: tuple[dict[str, str], ...] = (
         "title": "Готовая проза",
         "rule": (
             "Не черновик: законченные сцены, живой русский, мало повторов «кивнул/пошёл/понял». "
-            "Нет китайского, меток ИИ, обрывов, канцелярита генератора. "
-            "Главы не короче минимума слов."
+            "Канцелярит генератора и пустые кивки без нового факта — это ещё не книга."
+        ),
+    },
+    {
+        "key": "mechanics",
+        "title": "Механический брак",
+        "rule": (
+            "Текст можно читать как книгу: нет опечаток, обрывов, html/markdown, китайского, "
+            "латиницы внутри русских слов, меток ИИ, битой кодировки, повторных заголовков. "
+            "Главы не короче минимума слов и заканчиваются законченным предложением."
         ),
     },
 )
@@ -99,6 +107,32 @@ def parse_scores(payload: object) -> dict[str, dict[str, object]]:
     return result
 
 
+_MECHANICS_CAPS: tuple[tuple[str, int, str], ...] = (
+    ("китайские", 2, "китайские иероглифы в тексте"),
+    ("служебный", 3, "служебный текст модели"),
+    ("html", 3, "html или markdown в прозе"),
+    ("кодиров", 3, "сломанная кодировка"),
+    ("короткая", 5, "есть главы короче минимума слов"),
+    ("смешанн", 5, "латиница внутри русских слов"),
+    ("опечат", 6, "видимые опечатки или залипание клавиш"),
+    ("обрыв", 6, "глава обрывается на полуслове"),
+    ("повтор заголовка", 6, "повтор заголовка главы"),
+    ("повтор слова", 7, "залипшие повторы слов"),
+)
+
+
+def _mechanics_flags(mechanical: list[dict]) -> list[tuple[int, str]]:
+    rows: list[tuple[int, str]] = []
+    for row in mechanical:
+        number = int(row.get("n") or 0)
+        for flag in row.get("flags") or []:
+            text = str(flag)
+            if "спойлер" in text or "убийца" in text:
+                continue
+            rows.append((number, text))
+    return rows
+
+
 def cap_scores(
     scores: dict[str, dict[str, object]],
     *,
@@ -110,10 +144,6 @@ def cap_scores(
     if any("короткая" in flag for flag in flags):
         scores["prose"]["score"] = min(int(scores["prose"]["score"]), 6)
         scores["prose"]["gap"] = "есть главы короче минимума слов"
-    if "китайские" in blob:
-        scores["prose"]["score"] = min(int(scores["prose"]["score"]), 3)
-    if "служебный текст" in blob:
-        scores["prose"]["score"] = min(int(scores["prose"]["score"]), 4)
     if "спойлер" in blob or "убийца" in blob:
         scores["fair_play"]["score"] = min(int(scores["fair_play"]["score"]), 4)
         scores["fair_play"]["gap"] = "ранний спойлер убийцы"
@@ -125,6 +155,27 @@ def cap_scores(
     if last_words and min(last_words) < 450:
         scores["payoff"]["score"] = min(int(scores["payoff"]["score"]), 5)
         scores["payoff"]["gap"] = "финальные главы слишком короткие для разоблачения"
+
+    mech_flags = _mechanics_flags(mechanical)
+    hard = 10
+    gaps: list[str] = []
+    chapters: list[int] = []
+    for number, flag in mech_flags:
+        if number:
+            chapters.append(number)
+        for needle, cap, reason in _MECHANICS_CAPS:
+            if needle in flag:
+                hard = min(hard, cap)
+                if reason not in gaps:
+                    gaps.append(reason)
+    if words < 8000:
+        hard = min(hard, 6)
+        if "книга короткая" not in " ".join(gaps):
+            gaps.append(f"книга короткая: {words} слов")
+    scores["mechanics"]["score"] = min(int(scores["mechanics"]["score"]), hard)
+    if gaps:
+        scores["mechanics"]["gap"] = "; ".join(gaps)
+        scores["mechanics"]["chapters"] = sorted(set(chapters))
     return scores
 
 
@@ -142,8 +193,10 @@ def failing(scores: dict[str, dict[str, object]], floor: int) -> list[dict[str, 
     ]
 
 
-def meets_bar(scores: dict[str, dict[str, object]], floor: int, *, mechanical_ok: bool) -> bool:
-    return mechanical_ok and bool(scores) and min_score_of(scores) >= floor
+def meets_bar(scores: dict[str, dict[str, object]], floor: int) -> bool:
+    if len(scores) < len(CRITERIA):
+        return False
+    return min_score_of(scores) >= floor
 
 
 def chapters_to_fix(scores: dict[str, dict[str, object]], floor: int, chapter_count: int) -> set[int]:
@@ -159,13 +212,13 @@ def chapters_to_fix(scores: dict[str, dict[str, object]], floor: int, chapter_co
         needed.update({1, 2, 3})
     if "red_herrings" in keys:
         needed.update({3, 5, 6, 8})
-    if "prose" in keys or not needed:
+    if "prose" in keys or "mechanics" in keys or not needed:
         needed.update(range(1, chapter_count + 1))
     return {n for n in needed if 1 <= n <= chapter_count}
 
 
 def prompt_block() -> str:
-    lines = ["Критерии детектива, оценка 1–10 (8 минимум для готовности, 10 цель):"]
+    lines = ["Семь критериев, оценка 1–10 (8 минимум для готовности, 10 цель):"]
     for item in CRITERIA:
         lines.append(f"- {item['key']} ({item['title']}): {item['rule']}")
     return "\n".join(lines)
