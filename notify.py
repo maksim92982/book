@@ -77,6 +77,9 @@ def format_round_report(summary: dict, *, footer: str = "") -> str:
         "Круги разбора",
         f"круг {n} · {at} · мин {min_score}/10 · {words} слов",
     ]
+    judge = str(summary.get("judge") or "").strip()
+    if judge:
+        lines.append(f"судья: {judge}")
     criteria = summary.get("criteria") if isinstance(summary.get("criteria"), dict) else {}
     for item in CRITERIA:
         raw = criteria.get(item["key"])

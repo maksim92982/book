@@ -45,6 +45,7 @@ def run() -> None:
             "clean": review.get("clean"),
             "words": review.get("words"),
             "min_score": review.get("min_score"),
+            "judge": review.get("judge"),
             "criteria": {
                 key: {"score": row.get("score"), "title": row.get("title"), "gap": row.get("gap")}
                 for key, row in criteria.items()

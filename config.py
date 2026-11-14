@@ -21,6 +21,7 @@ TARGET_CRITERION_SCORE = int(os.getenv("LITRESS_TARGET_SCORE", "10") or "10")
 GIT_REMOTE = os.getenv("LITRESS_GIT_REMOTE", "git@github.com:maksim92982/book.git").strip()
 GIT_BRANCH = os.getenv("LITRESS_GIT_BRANCH", "main").strip() or "main"
 GIT_SYNC = os.getenv("LITRESS_GIT_SYNC", "1").strip().lower() not in {"0", "false", "no"}
+JUDGE_MODEL = os.getenv("LITRESS_JUDGE_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 CATALOG_PATH = ROOT / "books.json"
 
 

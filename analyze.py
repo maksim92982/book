@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 
 from config import BOOK_DIR, MIN_CHAPTER_WORDS, MIN_CRITERION_SCORE
-from quality.mechanics import scan_mechanics
 from criteria import (
     CRITERIA,
     cap_scores,
@@ -16,6 +15,7 @@ from criteria import (
     parse_scores,
     prompt_block,
 )
+from gemini_judge import generate_json
 from generate import (
     BOOK,
     CHAPTERS,
@@ -23,34 +23,11 @@ from generate import (
     FACTS,
     OUTLINE,
     PREMISE,
-    chat,
+    assemble,
     write,
 )
 from logs_util import emit, now_iso, patch_state
-
-EMPTY_STYLE = {
-    "шероховатость языка",
-    "шероховатость",
-    "2-4 предложения",
-    "2 предложения",
-    "можно улучшить гладкость текста",
-}
-_TASTE = (
-    "можно ",
-    "возможно",
-    "стоит ",
-    "добавьте",
-    "добавить",
-    "улучш",
-    "красив",
-    "более жив",
-    "более динамич",
-    "более разнообраз",
-    "можно упростить",
-    "можно сделать",
-    "для лучшей читаемости",
-    "для усиления",
-)
+from quality.mechanics import scan_mechanics
 
 
 def load_outline() -> dict:
@@ -91,33 +68,7 @@ def mechanical_chapter(path: Path) -> dict:
     return {"file": path.name, "n": number, "words": words, "flags": flags, "text": text}
 
 
-def _is_taste(text: str) -> bool:
-    low = text.casefold()
-    if low in EMPTY_STYLE:
-        return True
-    if "спойлер" in low or "убийц" in low or "канон" in low:
-        return False
-    return any(token in low for token in _TASTE)
-
-
-def _clean_list(raw: object) -> list[str]:
-    if not isinstance(raw, list):
-        return []
-    items: list[str] = []
-    for item in raw:
-        if isinstance(item, dict):
-            comment = str(item.get("comment") or item.get("fact") or "")
-            quote = str(item.get("text") or "")
-            text = f"{quote}: {comment}".strip(": ").strip()
-        else:
-            text = str(item or "").strip()
-        if not text or _is_taste(text):
-            continue
-        items.append(text)
-    return items
-
-
-def review_chapter(path: Path, data: dict, mech: dict) -> dict:
+def _chapter_stub(path: Path, data: dict, mech: dict) -> dict:
     number = int(path.stem)
     plan = next(
         (
@@ -127,96 +78,62 @@ def review_chapter(path: Path, data: dict, mech: dict) -> dict:
         ),
         None,
     )
-    prompt = f"""Ты строгий редактор детектива. Проверь ОДНУ главу.
-
-Канон (убийцу до главы 13 нельзя называть убийцей):
-{PREMISE.read_text(encoding="utf-8")[:1600]}
-
-Персонажи:
-{CHARACTERS.read_text(encoding="utf-8")[:1600]}
-
-План главы:
-{json.dumps(plan, ensure_ascii=False) if plan else "нет"}
-
-Машинные флаги: {mech.get("flags") or "нет"}
-
-Текст:
-{mech["text"][:5200]}
-
-Это детектив. Смотри: улики, ложные следы, спойлер убийцы, черновик прозы, опечатки и обрывы.
-Верни СТРОГО JSON:
-{{
-  "score": 7,
-  "plot_ok": true,
-  "early_killer": false,
-  "holes": [],
-  "style": [],
-  "canon": [],
-  "verdict": "два предложения по делу"
-}}
-Правила списков: только конкретные замечания с цитатой или фактом.
-Пустой список, если замечаний нет.
-Запрещено писать «шероховатость языка» и заглушки вроде «2-4 предложения».
-Не хвали. Не выдумывай дыры, которых нет в тексте."""
-    raw = chat(prompt, temperature=0.15, num_predict=900, timeout=700)
-    try:
-        payload = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
-    except (ValueError, json.JSONDecodeError):
-        payload = {
-            "score": 0,
-            "plot_ok": False,
-            "early_killer": False,
-            "holes": ["модель не вернула JSON"],
-            "style": [],
-            "canon": [],
-            "verdict": raw[:500],
-        }
     return {
         "n": number,
         "title": str((plan or {}).get("title") or path.name),
         "file": path.name,
         "words": mech["words"],
         "flags": mech["flags"],
-        "score": payload.get("score"),
-        "plot_ok": bool(payload.get("plot_ok")),
-        "early_killer": bool(payload.get("early_killer")),
-        "holes": _clean_list(payload.get("holes")),
-        "style": _clean_list(payload.get("style")),
-        "canon": _clean_list(payload.get("canon")),
-        "verdict": str(payload.get("verdict") or "").strip(),
+        "score": None,
+        "plot_ok": True,
+        "early_killer": any("спойлер" in flag or "убийца" in flag for flag in mech["flags"]),
+        "holes": [],
+        "style": [],
+        "canon": [],
+        "verdict": "",
     }
 
 
-def _book_snippets() -> str:
+def _book_text() -> str:
+    if BOOK.is_file():
+        return BOOK.read_text(encoding="utf-8")
     chunks: list[str] = []
     for path in chapter_files():
-        body = path.read_text(encoding="utf-8")
-        number = int(path.stem)
-        if number in {1, 2, 3, 12, 13, 14}:
-            chunks.append(f"### Глава {number}\n{body[:900]}\n[...]\n{body[-450:]}")
-        else:
-            chunks.append(f"### Глава {number}\n{body[:380]}\n[...]\n{body[-220:]}")
-    return "\n\n".join(chunks)[:6200]
+        chunks.append(path.read_text(encoding="utf-8").strip())
+    return "\n\n".join(chunks)
 
 
-def score_book(data: dict, mechanical: list[dict], words: int) -> tuple[dict[str, dict[str, object]], str]:
+def score_book(data: dict, mechanical: list[dict], words: int) -> tuple[dict[str, dict[str, object]], str, str]:
     facts = FACTS.read_text(encoding="utf-8") if FACTS.is_file() else ""
     keys = ", ".join(item["key"] for item in CRITERIA)
-    prompt = f"""Ты судья интеллектуального детектива, не болельщик. Повесть «{data.get("title")}».
+    flags = [
+        f"гл. {row.get('n')}: {', '.join(row.get('flags') or []) or 'ок'}"
+        for row in mechanical
+    ]
+    prompt = f"""Ты строгий приёмщик интеллектуального детектива. Локальная модель уже написала черновик.
+Твоя задача — НЕ писать главы, а принять или забраковать и сказать, что чинить.
+
+Повесть «{data.get("title")}».
 
 {prompt_block()}
 
-Ставь 10 только если критерий закрыт как в готовой книге. 7 — ещё черновик. Ниже 8 — нельзя публиковать.
-Не завышай: локальная модель часто пишет гладко, но без улики и ложных следов.
+Ставь 10 только если критерий закрыт как в готовой книге. 7 — черновик. Ниже 8 — нельзя публиковать.
+Не хвали. Не выдумывай дыр, которых нет в тексте. Укажи конкретные главы.
 
 Канон:
-{(PREMISE.read_text(encoding="utf-8") if PREMISE.is_file() else "")[:1400]}
+{(PREMISE.read_text(encoding="utf-8") if PREMISE.is_file() else "")[:2000]}
 
-Факты:
-{facts[:2200]}
+Персонажи:
+{(CHARACTERS.read_text(encoding="utf-8") if CHARACTERS.is_file() else "")[:1600]}
 
-Текст:
-{_book_snippets()}
+Машинные флаги:
+{chr(10).join(flags)}
+
+Факты памяти:
+{facts[:2500]}
+
+Полный текст:
+{_book_text()}
 
 Верни СТРОГО JSON:
 {{
@@ -229,32 +146,29 @@ def score_book(data: dict, mechanical: list[dict], words: int) -> tuple[dict[str
     "prose": {{"score": 7, "gap": "...", "chapters": [2, 6]}},
     "mechanics": {{"score": 7, "gap": "...", "chapters": [2]}}
   }},
-  "verdict": "четыре предложения: что ломает детектив и что править первым"
+  "verdict": "четыре предложения: что ломает детектив и что локальной модели править первым"
 }}
-Ключи только такие: {keys}. score целое 1–10. chapters — номера глав, которые надо переписать."""
-    raw = chat(prompt, temperature=0.1, num_predict=900, timeout=900)
+Ключи только такие: {keys}. score целое 1–10. chapters — номера глав на переписывание."""
+    raw, model = generate_json(prompt)
     try:
         payload = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
     except (ValueError, json.JSONDecodeError):
-        payload = {}
         scores = empty_scores()
-        verdict = raw[:700] or "модель не вернула JSON по критериям"
-        return scores, verdict
+        verdict = raw[:700] or "Gemini не вернул JSON по критериям"
+        return scores, verdict, model
     scores = cap_scores(parse_scores(payload), mechanical=mechanical, words=words)
     verdict = str(payload.get("verdict") or "").strip()
-    return scores, verdict
+    return scores, verdict, model
 
 
 def blockers_of(chapter: dict) -> list[str]:
     items: list[str] = []
     items.extend(f"машина: {flag}" for flag in chapter.get("flags") or [])
-    if not chapter.get("plot_ok"):
-        items.append("сюжет не по плану")
     if chapter.get("early_killer"):
         items.append("ранний спойлер убийцы")
     items.extend(f"дыра: {item}" for item in chapter.get("holes") or [])
     items.extend(f"канон: {item}" for item in chapter.get("canon") or [])
-    items.extend(f"язык: {item}" for item in chapter.get("style") or [] if not _is_taste(item))
+    items.extend(f"язык: {item}" for item in chapter.get("style") or [])
     return items
 
 
@@ -267,7 +181,7 @@ def render_markdown(review: dict) -> str:
     lines = [
         f"# Редакторская проверка — {review.get('title') or 'повесть'}",
         "",
-        f"Круг {review.get('round')}. {review.get('at')}. Модель разобрала главы в JSON.",
+        f"Круг {review.get('round')}. {review.get('at')}. Судья: {review.get('judge') or 'Gemini'}.",
         "",
         f"Замечаний: {review.get('issue_count')}. Чисто: {'да' if review.get('clean') else 'нет'}.",
         f"Мин. балл по критериям: {review.get('min_score')}. Порог {MIN_CRITERION_SCORE}/10.",
@@ -293,21 +207,13 @@ def render_markdown(review: dict) -> str:
     for chapter in review.get("chapters") or []:
         lines.append(f"### Глава {chapter.get('n')}. {chapter.get('title')}")
         lines.append("")
-        lines.append(
-            f"Оценка {chapter.get('score')}/10. План: "
-            f"{'да' if chapter.get('plot_ok') else 'нет'}. "
-            f"Ранний убийца: {'да' if chapter.get('early_killer') else 'нет'}."
-        )
-        lines.append("")
-        lines.append(str(chapter.get("verdict") or ""))
-        lines.append("")
         notes = blockers_of(chapter)
         if notes:
             for note in notes:
                 lines.append(f"- {note}")
             lines.append("")
         else:
-            lines.append("Замечаний нет.")
+            lines.append("Машинных флагов нет. Правки — по вердикту судьи.")
             lines.append("")
     return "\n".join(lines)
 
@@ -316,6 +222,7 @@ def run_review(*, round_n: int = 0, round_dir: Path | None = None) -> dict:
     if not OUTLINE.is_file():
         raise RuntimeError("нет bible/outline.json")
     data = load_outline()
+    assemble()
     patch_state(status="analyze", round=round_n, message=f"круг {round_n}: машинная проверка")
     emit("analyze_start", round=round_n)
     mechanical = []
@@ -323,12 +230,11 @@ def run_review(*, round_n: int = 0, round_dir: Path | None = None) -> dict:
     for path in chapter_files():
         mech = mechanical_chapter(path)
         mechanical.append({key: mech[key] for key in ("file", "n", "words", "flags")})
-        patch_state(message=f"круг {round_n}: разбор главы {mech['n']}")
-        emit("analyze_chapter", round=round_n, chapter=mech["n"])
-        chapters.append(review_chapter(path, data, mech))
-    patch_state(message=f"круг {round_n}: оценка по критериям детектива")
+        chapters.append(_chapter_stub(path, data, mech))
+    patch_state(message=f"круг {round_n}: судья Gemini читает книгу")
+    emit("gemini_judge_start", round=round_n)
     words = sum(int(row.get("words") or 0) for row in mechanical)
-    scores, book_notes = score_book(data, mechanical, words)
+    scores, book_notes, model = score_book(data, mechanical, words)
     issue_count = sum(len(blockers_of(chapter)) for chapter in chapters) + len(
         failing(scores, MIN_CRITERION_SCORE)
     )
@@ -345,6 +251,7 @@ def run_review(*, round_n: int = 0, round_dir: Path | None = None) -> dict:
         "issue_count": issue_count,
         "clean": False,
         "book_path": str(BOOK),
+        "judge": model,
     }
     review["clean"] = is_clean(review)
     report = render_markdown(review)
@@ -355,7 +262,13 @@ def run_review(*, round_n: int = 0, round_dir: Path | None = None) -> dict:
             json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         (round_dir / "REPORT.md").write_text(report, encoding="utf-8")
-    emit("analyze_done", round=round_n, issue_count=issue_count, clean=review["clean"])
+    emit(
+        "analyze_done",
+        round=round_n,
+        issue_count=issue_count,
+        clean=review["clean"],
+        judge=model,
+    )
     return review
 
 
