@@ -1,0 +1,389 @@
+{
+  "at": "2026-11-14T15:28:27+01:00",
+  "round": 9,
+  "title": "Песни Дуная",
+  "words": 9862,
+  "mechanical": [
+    {
+      "file": "01.md",
+      "n": 1,
+      "words": 640,
+      "flags": []
+    },
+    {
+      "file": "02.md",
+      "n": 2,
+      "words": 578,
+      "flags": []
+    },
+    {
+      "file": "03.md",
+      "n": 3,
+      "words": 993,
+      "flags": [
+        "обрыв главы"
+      ]
+    },
+    {
+      "file": "04.md",
+      "n": 4,
+      "words": 787,
+      "flags": []
+    },
+    {
+      "file": "05.md",
+      "n": 5,
+      "words": 733,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ]
+    },
+    {
+      "file": "06.md",
+      "n": 6,
+      "words": 471,
+      "flags": []
+    },
+    {
+      "file": "07.md",
+      "n": 7,
+      "words": 668,
+      "flags": []
+    },
+    {
+      "file": "08.md",
+      "n": 8,
+      "words": 830,
+      "flags": []
+    },
+    {
+      "file": "09.md",
+      "n": 9,
+      "words": 662,
+      "flags": []
+    },
+    {
+      "file": "10.md",
+      "n": 10,
+      "words": 735,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ]
+    },
+    {
+      "file": "11.md",
+      "n": 11,
+      "words": 644,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ]
+    },
+    {
+      "file": "12.md",
+      "n": 12,
+      "words": 587,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ]
+    },
+    {
+      "file": "13.md",
+      "n": 13,
+      "words": 843,
+      "flags": [
+        "смешанный алфавит в слове"
+      ]
+    },
+    {
+      "file": "14.md",
+      "n": 14,
+      "words": 691,
+      "flags": []
+    }
+  ],
+  "chapters": [
+    {
+      "n": 1,
+      "title": "Ночь на берегах",
+      "file": "01.md",
+      "words": 640,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 2,
+      "title": "Белая лодка",
+      "file": "02.md",
+      "words": 578,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 3,
+      "title": "Ложные следы",
+      "file": "03.md",
+      "words": 993,
+      "flags": [
+        "обрыв главы"
+      ],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 4,
+      "title": "Вечер на Савамале",
+      "file": "04.md",
+      "words": 787,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 5,
+      "title": "День на Дунае",
+      "file": "05.md",
+      "words": 733,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": true,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 6,
+      "title": "Ночь на Нови Београд",
+      "file": "06.md",
+      "words": 471,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 7,
+      "title": "Ночь в Белграде",
+      "file": "07.md",
+      "words": 668,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 8,
+      "title": "День на Савамале",
+      "file": "08.md",
+      "words": 830,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 9,
+      "title": "Ночь на Дунае",
+      "file": "09.md",
+      "words": 662,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 10,
+      "title": "День на Нови Београд",
+      "file": "10.md",
+      "words": 735,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": true,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 11,
+      "title": "Ночь на Савамале",
+      "file": "11.md",
+      "words": 644,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": true,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 12,
+      "title": "Ночь на Дунае",
+      "file": "12.md",
+      "words": 587,
+      "flags": [
+        "имя убийцы рядом со словом убийца"
+      ],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": true,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 13,
+      "title": "Разоблачение",
+      "file": "13.md",
+      "words": 843,
+      "flags": [
+        "смешанный алфавит в слове"
+      ],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    },
+    {
+      "n": 14,
+      "title": "Последнее слово",
+      "file": "14.md",
+      "words": 691,
+      "flags": [],
+      "score": null,
+      "plot_ok": true,
+      "early_killer": false,
+      "holes": [],
+      "style": [],
+      "canon": [],
+      "verdict": ""
+    }
+  ],
+  "criteria": {
+    "puzzle": {
+      "score": 6,
+      "gap": "Преступление тонет в бесконечных разговорах про туман и повторах одних и тех же диалогов вместо активного расследования улик.",
+      "chapters": [
+        1,
+        2,
+        3
+      ],
+      "title": "Загадка и ставка"
+    },
+    "fair_play": {
+      "score": 4,
+      "gap": "ранний спойлер убийцы",
+      "chapters": [
+        5,
+        10,
+        11
+      ],
+      "title": "Честная игра"
+    },
+    "red_herrings": {
+      "score": 6,
+      "gap": "Ложные следы сводятся к формальному упоминанию 'ложных путей' без реальной проверки других версий.",
+      "chapters": [
+        3,
+        7
+      ],
+      "title": "Ложные следы"
+    },
+    "payoff": {
+      "score": 5,
+      "gap": "Финал смазан: разоблачение не опирается на железную цепь улик, персонажи топчутся на месте, убийца не изобличён окончательно.",
+      "chapters": [
+        13,
+        14
+      ],
+      "title": "Разоблачение"
+    },
+    "cast": {
+      "score": 7,
+      "gap": "Персонажи иногда говорят одинаково, диалоги зациклены, а поведение Марины и Милоша шаблонно.",
+      "chapters": [
+        4,
+        8
+      ],
+      "title": "Персонажи и канон"
+    },
+    "prose": {
+      "score": 5,
+      "gap": "Чудовищное количество повторов ('туман', 'подделки провенансов', 'лодка'), штампы и механический генераторный стиль.",
+      "chapters": [
+        2,
+        6,
+        9,
+        12
+      ],
+      "title": "Готовая проза"
+    },
+    "mechanics": {
+      "score": 5,
+      "gap": "текст обрывается на полуслове; латиница внутри кириллического слова",
+      "chapters": [
+        3,
+        13
+      ],
+      "title": "Механический брак"
+    }
+  },
+  "min_score": 4,
+  "book": "Главная проблема текста — катастрофические циклические повторы одних и тех же сцен, фраз про туман и обсуждений одних и тех же подделок из главы в главу. Детективная логика буксует, расследование не движется вперед, а топчется на месте. Модели необходимо полностью переписать средние главы, убрав воду и повторы, а также выстроить четкую линию укилик для финала.",
+  "issue_count": 17,
+  "clean": false,
+  "book_path": "C:\\dev\\ai.bsmd\\litress\\books\\01-pesni-dunaya\\book.md",
+  "judge": "gemini-3.5-flash-lite"
+}
