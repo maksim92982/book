@@ -5,6 +5,7 @@ from config import MAX_ROUNDS, MIN_CRITERION_SCORE, ROUNDS, TARGET_CRITERION_SCO
 from correct import apply_review
 from git_sync import push_snapshot
 from logs_util import emit, load_state, patch_state, save_state
+from notify import notify_round, send_job_chat
 
 
 def next_round() -> int:
@@ -27,6 +28,10 @@ def run() -> None:
                 message=f"достигнут лимит кругов {MAX_ROUNDS}",
             )
             emit("loop_stop", reason="max_rounds")
+            notify_round(
+                load_state().get("last_review") or {"n": round_n, "criteria": {}},
+                footer=f"Остановлен: лимит кругов {MAX_ROUNDS}.",
+            )
             return
         round_dir = ROUNDS / f"{round_n:03d}"
         round_dir.mkdir(parents=True, exist_ok=True)
@@ -75,8 +80,10 @@ def run() -> None:
                 ),
             )
             emit("loop_done", round=round_n, min_score=review.get("min_score"))
+            notify_round(summary, footer="Готово: все критерии ≥ 8. Цикл остановлен.")
             push_snapshot("книга готова")
             return
+        notify_round(summary)
         push_snapshot(f"круг {round_n}: разбор")
         apply_review(review, round_dir)
         patch_state(message=f"круг {round_n}: правки записаны, будет новый разбор")
@@ -89,6 +96,7 @@ def main() -> None:
     except Exception as error:
         emit("loop_error", error=str(error))
         patch_state(status="error", message=str(error))
+        send_job_chat(f"Круги разбора\nошибка цикла: {error}")
         raise
 
 

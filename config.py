@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+_SHARED = ROOT.parent / "shared"
+if _SHARED.is_dir() and str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b").strip() or "qwen2.5:7b"
 NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192") or "8192")

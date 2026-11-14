@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_SHARED = Path(__file__).resolve().parents[1] / "shared"
+if _SHARED.is_dir() and str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+
+from quality.mechanics import CRITERION as MECHANICS_CRITERION
+from quality.mechanics import hard_score as mechanics_hard_score
+
 # Шкала 1–10. Цикл не останавливается, пока каждый критерий < MIN_SCORE.
 # 8 — «можно читать как повесть, не черновик». 10 — плотный детектив без дыр.
 
@@ -54,15 +64,7 @@ CRITERIA: tuple[dict[str, str], ...] = (
             "Канцелярит генератора и пустые кивки без нового факта — это ещё не книга."
         ),
     },
-    {
-        "key": "mechanics",
-        "title": "Механический брак",
-        "rule": (
-            "Текст можно читать как книгу: нет опечаток, обрывов, html/markdown, китайского, "
-            "латиницы внутри русских слов, меток ИИ, битой кодировки, повторных заголовков. "
-            "Главы не короче минимума слов и заканчиваются законченным предложением."
-        ),
-    },
+    MECHANICS_CRITERION,
 )
 
 CRITERION_KEYS = tuple(item["key"] for item in CRITERIA)
@@ -107,20 +109,6 @@ def parse_scores(payload: object) -> dict[str, dict[str, object]]:
     return result
 
 
-_MECHANICS_CAPS: tuple[tuple[str, int, str], ...] = (
-    ("китайские", 2, "китайские иероглифы в тексте"),
-    ("служебный", 3, "служебный текст модели"),
-    ("html", 3, "html или markdown в прозе"),
-    ("кодиров", 3, "сломанная кодировка"),
-    ("короткая", 5, "есть главы короче минимума слов"),
-    ("смешанн", 5, "латиница внутри русских слов"),
-    ("опечат", 6, "видимые опечатки или залипание клавиш"),
-    ("обрыв", 6, "глава обрывается на полуслове"),
-    ("повтор заголовка", 6, "повтор заголовка главы"),
-    ("повтор слова", 7, "залипшие повторы слов"),
-)
-
-
 def _mechanics_flags(mechanical: list[dict]) -> list[tuple[int, str]]:
     rows: list[tuple[int, str]] = []
     for row in mechanical:
@@ -157,21 +145,16 @@ def cap_scores(
         scores["payoff"]["gap"] = "финальные главы слишком короткие для разоблачения"
 
     mech_flags = _mechanics_flags(mechanical)
-    hard = 10
-    gaps: list[str] = []
     chapters: list[int] = []
+    messages: list[str] = []
     for number, flag in mech_flags:
         if number:
             chapters.append(number)
-        for needle, cap, reason in _MECHANICS_CAPS:
-            if needle in flag:
-                hard = min(hard, cap)
-                if reason not in gaps:
-                    gaps.append(reason)
-    if words < 8000:
-        hard = min(hard, 6)
-        if "книга короткая" not in " ".join(gaps):
-            gaps.append(f"книга короткая: {words} слов")
+        messages.append(flag)
+    extra = [6] if words < 8000 else []
+    hard, gaps = mechanics_hard_score(messages, extra_caps=extra)
+    if words < 8000 and "книга короткая" not in " ".join(gaps):
+        gaps.append(f"книга короткая: {words} слов")
     scores["mechanics"]["score"] = min(int(scores["mechanics"]["score"]), hard)
     if gaps:
         scores["mechanics"]["gap"] = "; ".join(gaps)

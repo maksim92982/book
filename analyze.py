@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from config import BOOK_DIR, MIN_CHAPTER_WORDS, MIN_CRITERION_SCORE
+from quality.mechanics import scan_mechanics
 from criteria import (
     CRITERIA,
     cap_scores,
@@ -27,19 +28,6 @@ from generate import (
 )
 from logs_util import emit, now_iso, patch_state
 
-CJK = re.compile(r"[\u4e00-\u9fff]")
-HTML_TAG = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?>")
-MIXED_WORD = re.compile(r"(?:[А-Яа-яЁё][A-Za-z]|[A-Za-z][А-Яа-яЁё])")
-STUCK_KEYS = re.compile(r"([А-Яа-яA-Za-z])\1{3,}")
-REPEAT_WORD = re.compile(r"\b([А-Яа-яЁёA-Za-z]{3,})\s+\1\b", re.I)
-AI_MARKERS = (
-    "я сейчас",
-    "как ии",
-    "языковая модель",
-    "as an ai",
-    "i am an ai",
-    "как нейросеть",
-)
 EMPTY_STYLE = {
     "шероховатость языка",
     "шероховатость",
@@ -83,29 +71,16 @@ def killer_name() -> str:
 def mechanical_chapter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     words = len(text.split())
-    flags: list[str] = []
-    folded = text.casefold()
-    if CJK.search(text):
-        flags.append("китайские иероглифы")
-    if words < MIN_CHAPTER_WORDS:
-        flags.append(f"короткая ({words} слов, минимум {MIN_CHAPTER_WORDS})")
-    if text.count("Глава ") > 2:
-        flags.append("повтор заголовка")
-    if any(marker in folded for marker in AI_MARKERS):
-        flags.append("служебный текст модели")
-    if HTML_TAG.search(text) or "```" in text or "<span" in folded:
-        flags.append("html или markdown в прозе")
-    if "\ufffd" in text or "�" in text:
-        flags.append("сломанная кодировка")
-    if MIXED_WORD.search(text):
-        flags.append("смешанный алфавит в слове")
-    if STUCK_KEYS.search(text):
-        flags.append("опечатка: залипание клавиш")
-    if len(REPEAT_WORD.findall(text)) >= 3:
-        flags.append("повтор слова")
-    stripped = text.strip()
-    if stripped and stripped[-1] not in ".!?…»\"":
-        flags.append("обрыв главы")
+    flags = [
+        item.message
+        for item in scan_mechanics(
+            text,
+            min_words=MIN_CHAPTER_WORDS,
+            require_end=True,
+            heading="Глава ",
+            heading_max=2,
+        )
+    ]
     secret = killer_name()
     number = int(path.stem)
     if secret and number < 13:
